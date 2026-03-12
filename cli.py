@@ -36,14 +36,10 @@ def get_hb():
             if os.path.exists(STATUS_FILE):
                 with open(STATUS_FILE, 'r') as f:
                     d = json.load(f)
-                    p = d.get('ping', {})
-                    last = d.get('last_ping', 0)
-                    color = "red" if last == "RTO" else "green"
-                    m = f"Last: [{color}]{last}[/] | Min: {p.get('min',0)} | Avg: {p.get('avg',0)} | Max: {p.get('max',0)} ms"
-                    return '🟢 RUNNING', m
+                    return '🟢 RUNNING', d.get('msg', 'Loading...'), d.get('color', 'white')
         except: pass
-        return '🟢 RUNNING', 'Fetching data...'
-    return '🔴 STOPPED', '-'
+        return '🟢 RUNNING', 'Fetching...', 'white'
+    return '🔴 STOPPED', '-', 'white'
 
 def run_svc(svc):
     if svc == 'ts':
@@ -66,32 +62,27 @@ def generate_ui():
     table = Table(box=box.ROUNDED, expand=True, border_style="blue")
     table.add_column('Service', style='cyan', width=12)
     table.add_column('Status', width=15)
-    table.add_column('Metrics / Info', style='white')
+    table.add_column('Metrics', style='white')
     
     ts_s, ts_i = get_ts()
     ss_s, ss_i = get_ssh()
-    hb_s, hb_i = get_hb()
+    hb_s, hb_i, hb_c = get_hb()
     
     table.add_row('Tailscale', ts_s, ts_i)
     table.add_row('SSH', ss_s, ss_i)
-    table.add_row('Heartbeat', hb_s, hb_i)
+    table.add_row(f'[bold {hb_c}]Heartbeat[/]', hb_s, hb_i)
     
-    return Panel(
-        table, 
-        title='🔥 [bold white]Heartbeat Monitor[/] [dim]Dashboard[/]', 
-        subtitle='[yellow]1[/]:TS [yellow]2[/]:SSH [yellow]3[/]:HB | [red]Q[/]:Quit',
-        border_style='magenta'
-    )
+    return Panel(table, title='[bold white]🔥 Heartbeat[/] [dim]Monitor[/]', subtitle='[yellow]1[/]:TS [yellow]2[/]:SSH [yellow]3[/]:HB | [red]Q[/]:Quit', border_style='magenta')
 
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
-    with Live(generate_ui(), refresh_per_second=4, transient=False) as live:
-        old_settings = termios.tcgetattr(sys.stdin)
+    with Live(generate_ui(), refresh_per_second=10, transient=False) as live:
+        old = termios.tcgetattr(sys.stdin)
         try:
             tty.setcbreak(sys.stdin.fileno())
             while True:
                 live.update(generate_ui())
-                if select.select([sys.stdin], [], [], 0.1)[0]:
+                if select.select([sys.stdin], [], [], 0.05)[0]:
                     key = sys.stdin.read(1).lower()
                     if key == 'q': break
                     elif key == '1': run_svc('ts')
@@ -99,10 +90,8 @@ def main():
                     elif key == '3': run_svc('hb')
                 time.sleep(0.05)
         finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old)
 
 if __name__ == '__main__':
-    console.print("[bold cyan]Welcome Bas, Heartbeat system ready...[/]")
     try: main()
     except KeyboardInterrupt: pass
-    console.print("\n[bold green]Bye Bas![/]")

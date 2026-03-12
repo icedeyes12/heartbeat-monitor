@@ -1,54 +1,39 @@
 #!/usr/bin/env python3
-import subprocess, os, json, sys, re
+import subprocess, time, os, json, sys, re
 from datetime import datetime
 
+console = Console()
 LOG_DIR = '/home/workspace/heartbeat-monitor/logs'
 STATUS_FILE = f'{LOG_DIR}/status.json'
+TAIL_SOCK = '/var/run/tailscale/tailscaled.sock'
 
-def main():
-    os.makedirs(LOG_DIR, exist_ok=True)
-    pings = []
+def cmd(c, t=2):
+    try: return subprocess.run(c, capture_output=True, text=True, timeout=t)
+    except: return None
+
+def ping_once():
+    r = cmd(['ping', '-c', '1', '-W', '2', '1.1.1.1'])
+    if r and r.returncode == 0:
+        m = re.search(r'time=([
+[truncated]
+')/len(ping_times)
+        if d['ping']['avg'] < 30: color = 'green'
+        elif d['ping']['avg'] < 100: color = 'yellow'
+        else: color = 'red'
+        
+        d['msg'] = f"[bold {color}]Ping OK[/] | Min: {d['ping']['min']:.1f} | Avg: {d['ping']['avg']:.1f} | Max: {d['ping']['max']:.1f} ms"
+        d['color'] = color
     
-    process = subprocess.Popen(
-        ['ping', '1.1.1.1'],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1
-    )
+    with open(STATUS_FILE, 'w') as f:
+        json.dump(d, f)
     
-    try:
-        for line in iter(process.stdout.readline, ""):
-            line = line.strip()
-            match = re.search(r"time=([\d.]+)", line)
-            
-            if match:
-                ms = float(match.group(1))
-                pings.append(ms)
-                if len(pings) > 20: pings.pop(0)
-                
-                avg_val = round(sum(pings) / len(pings), 1)
-                min_val = round(min(pings), 1)
-                max_val = round(max(pings), 1)
-                
-                status = {
-                    'timestamp': datetime.now().strftime('%H:%M:%S'),
-                    'last_ping': ms,
-                    'ping': {'avg': avg_val, 'min': min_val, 'max': max_val, 'count': len(pings)}
-                }
-            elif "timeout" in line.lower() or "unreachable" in line.lower():
-                status = {
-                    'timestamp': datetime.now().strftime('%H:%M:%S'),
-                    'last_ping': 'RTO',
-                    'ping': {'avg': 0, 'min': 0, 'max': 0, 'count': 0}
-                }
-            else:
-                continue
-                
-            with open(STATUS_FILE, 'w') as f:
-                json.dump(status, f)
-    except KeyboardInterrupt:
-        process.terminate()
+    time.sleep(1)
 
 if __name__ == '__main__':
-    main()
+    os.makedirs(LOG_DIR, exist_ok=True)
+    console.print('[bold green]Daemon started[/]')
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    console.print('[bold red]Daemon stopped[/]')
