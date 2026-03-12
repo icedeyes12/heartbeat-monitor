@@ -35,19 +35,19 @@ def get_ts():
             parts = l.split()
             if len(parts) < 2: continue
             
-            # Logic: titit-0 (self) biasanya punya status '-' di kolom ke-5
             is_active = any(x in l.lower() for x in ["active", "idle"])
             is_self = parts[4] == "-" if len(parts) > 4 else False
             
             if parts[0].startswith('100.'):
                 name = parts[1]
+                # Status ditaruh setelah nama node
                 if is_self:
-                    icon = "[bold green]▣[/]" # Icon khusus mesin sendiri (Self)
+                    status = "[bold green]▣[/]" 
                 elif is_active:
-                    icon = "[green]●[/]"
+                    status = "[green]●[/]"
                 else:
-                    icon = "[red]○[/]"
-                nodes_info.append(f"{icon} {name}")
+                    status = "[red]○[/]"
+                nodes_info.append(f"{name} {status}")
         
         node_display = " | ".join(nodes_info) if nodes_info else "No nodes found"
         return '[green]● ONLINE[/]', f"{pid_text}\n{node_display}"
@@ -144,7 +144,6 @@ def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     while True:
         action = None
-        # refresh_per_second diturunin ke 2 biar CPU gak kerja rodi
         with Live(generate_ui(), refresh_per_second=2, transient=True) as live:
             old_settings = termios.tcgetattr(sys.stdin)
             try:
