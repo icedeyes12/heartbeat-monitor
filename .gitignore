@@ -1,0 +1,11 @@
+# Logs
+logs/
+*.log
+
+# Runtime
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
