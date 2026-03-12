@@ -105,7 +105,7 @@ def run_svc(svc):
 
 # --- UI Builder ---
 def generate_ui():
-    # Mengatur lebar kolom Service dan Status agar lebih ramping
+    # Mengatur lebar kolom Service dan Status agar lebih ramping (width=12)
     table = Table(box=box.ROUNDED, expand=True, border_style="blue", padding=(0, 1))
     table.add_column('Service', style='cyan', width=12) 
     table.add_column('Status', width=12)
@@ -165,11 +165,14 @@ def main():
             if not new_target: new_target = "1.1.1.1"
             with open(CONFIG_FILE, 'w') as f:
                 json.dump({"target": new_target}, f)
+            
+            # Restart daemon biar target baru aktif
             r = cmd(['pgrep', '-f', 'daemon.py'])
             if r and r.stdout.strip():
                 cmd(['pkill', '-f', 'daemon.py'])
                 time.sleep(0.5)
-                subprocess.Popen(['python3', DAEMON_PATH], stdout=subprocess.DEVNULL, stderr=stderr=subprocess.DEVNULL, start_new_session=True)
+                subprocess.Popen(['python3', DAEMON_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            
             console.print(f"[bold green]Target diubah ke {new_target}! Restarting dashboard...[/]")
             time.sleep(1)
 
