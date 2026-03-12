@@ -40,7 +40,6 @@ Host *
     TCPKeepAlive yes
 
 2. Buat Bocil Termux (Wajib!) ⚠️
-
 Kalo lo jalanin tools ini di Termux, Android bakal otomatis "nyuntik mati" prosesnya pas HP masuk kantong (CPU mode tidur).
 Biar lari maraton terus, lo WAJIB aktifin WakeLock:
 
