@@ -24,29 +24,42 @@ def cmd(c, t=2):
 def get_ts():
     r_pid = cmd(['pgrep', 'tailscaled'])
     pids = r_pid.stdout.strip().replace('\n', ',') if r_pid and r_pid.stdout else ""
-    pid_text = f"[dim cyan][PID: {pids}][/] " if pids else ""
+    pid_text = f"[dim cyan][{pids}][/] " if pids else ""
     
     r = cmd(['tailscale', '--socket=' + TAIL_SOCK, 'status'])
+    nodes_info = []
+    
     if r and r.returncode == 0:
-        for l in r.stdout.split('\n'):
-            if '100.126' in l or 'titit-0' in l:
-                return '🟢 ONLINE', pid_text + l.split()[0]
-    return '🔴 OFFLINE', '-'
+        lines = r.stdout.strip().split('\n')
+        for l in lines:
+            parts = l.split()
+            if not parts: continue
+            
+            # Deteksi node (biasanya diawali IP 100.x.x.x)
+            if parts[0].startswith('100.'):
+                name = parts[1]
+                # Memberikan indikator warna berdasarkan status koneksi node
+                status = "[green]●[/]" if "active" in l.lower() or "idle" in l.lower() else "[red]○[/]"
+                nodes_info.append(f"{status} {name}")
+        
+        info_display = pid_text + " | ".join(nodes_info) if nodes_info else pid_text + "No nodes found"
+        return '[green]● ONLINE[/]', info_display
+    return '[red]○ OFFLINE[/]', '-'
 
 def get_ssh():
     r_pid = cmd(['pgrep', 'sshd'])
     pids = r_pid.stdout.strip().replace('\n', ',') if r_pid and r_pid.stdout else ""
-    pid_text = f"[dim cyan][PID: {pids}][/] " if pids else ""
+    pid_text = f"[dim cyan][{pids}][/] " if pids else ""
     
     n = len(pids.split(',')) if pids else 0
     if n > 0: 
-        return '🟢 RUNNING', pid_text + f'{n} daemon | Port 2288'
-    return '🔴 STOPPED', '-'
+        return '[green]● RUNNING[/]', pid_text + f'{n} daemon | Port 2288'
+    return '[red]○ STOPPED[/]', '-'
 
 def get_hb():
     r_pid = cmd(['pgrep', '-f', 'daemon.py'])
     pids = r_pid.stdout.strip().replace('\n', ',') if r_pid and r_pid.stdout else ""
-    pid_text = f"[dim cyan][PID: {pids}][/] " if pids else ""
+    pid_text = f"[dim cyan][{pids}][/] " if pids else ""
     
     if pids:
         try:
@@ -55,13 +68,12 @@ def get_hb():
                     d = json.load(f)
                     p = d.get('ping', {})
                     last = d.get('last_ping', 'Wait...') 
-                    
                     color = "red" if "RTO" in str(last) else "green"
-                    m = f"Last: [{color}]{last}[/] | Min: {p.get('min',0)} | Avg: {p.get('avg',0)} | Max: {p.get('max',0)} ms"
-                    return '🟢 RUNNING', pid_text + m
+                    m = f"Last: [{color}]{last}[/] | Min/Avg/Max: {p.get('min',0)}/{p.get('avg',0)}/{p.get('max',0)} ms"
+                    return '[green]● RUNNING[/]', pid_text + m
         except: pass
-        return '🟢 RUNNING', pid_text + 'Wait...'
-    return '🔴 STOPPED', '-'
+        return '[green]● RUNNING[/]', pid_text + 'Wait...'
+    return '[red]○ STOPPED[/]', '-'
 
 # --- Service Toggles ---
 def run_svc(svc):
@@ -93,16 +105,16 @@ def run_svc(svc):
 
 # --- UI Builder ---
 def generate_ui():
-    table = Table(box=box.ROUNDED, expand=True, border_style="blue")
-    table.add_column('Service', style='cyan', width=16)
-    table.add_column('Status', width=15)
-    table.add_column('Metrics / Info', style='white')
+    # Mengatur lebar kolom Service dan Status agar lebih ramping
+    table = Table(box=box.ROUNDED, expand=True, border_style="blue", padding=(0, 1))
+    table.add_column('Service', style='cyan', width=12) 
+    table.add_column('Status', width=12)
+    table.add_column('Metrics / Info', style='white', no_wrap=False) 
     
     ts_s, ts_i = get_ts()
     ss_s, ss_i = get_ssh()
     hb_s, hb_i = get_hb()
     
-    # Baca target saat ini buat ditampilin di layar
     target = "1.1.1.1"
     if os.path.exists(CONFIG_FILE):
         try:
@@ -112,7 +124,7 @@ def generate_ui():
     
     table.add_row('Tailscale', ts_s, ts_i)
     table.add_row('SSH', ss_s, ss_i)
-    table.add_row(f'Heartbeat\n[dim cyan]({target})[/]', hb_s, hb_i)
+    table.add_row(f'Heartbeat\n[dim]({target})[/]', hb_s, hb_i)
     
     return Panel(
         table, 
@@ -121,21 +133,16 @@ def generate_ui():
         border_style='magenta'
     )
 
-# --- Main Logic ---
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
-    
     while True:
         action = None
-        
-        # Pake transient=True biar pas layar ganti ke prompt input, tabel lamanya ilang sementara
-        with Live(generate_ui(), refresh_per_second=10, transient=True) as live:
+        with Live(generate_ui(), refresh_per_second=5, transient=True) as live:
             old_settings = termios.tcgetattr(sys.stdin)
             try:
                 tty.setcbreak(sys.stdin.fileno())
                 while True:
                     live.update(generate_ui())
-                    
                     if select.select([sys.stdin], [], [], 0.05)[0]:
                         key = sys.stdin.read(1).lower()
                         if key == 'q': 
@@ -147,39 +154,27 @@ def main():
                         elif key == '1': run_svc('ts')
                         elif key == '2': run_svc('ssh')
                         elif key == '3': run_svc('hb')
-                    
                     time.sleep(0.05)
             finally:
                 termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         
-        # --- Handle aksi setelah Live ditutup sementara ---
-        if action == 'quit':
-            break
-            
+        if action == 'quit': break
         elif action == 'target':
             console.print("\n[bold cyan]=== Ganti Target Ping ===[/]")
             new_target = console.input("[bold]Masukkan IP/Domain (kosongkan untuk default 1.1.1.1): [/]").strip()
-            if not new_target:
-                new_target = "1.1.1.1"
-            
+            if not new_target: new_target = "1.1.1.1"
             with open(CONFIG_FILE, 'w') as f:
                 json.dump({"target": new_target}, f)
-            
-            # Restart daemon kalau lagi jalan biar langsung ngefek
             r = cmd(['pgrep', '-f', 'daemon.py'])
             if r and r.stdout.strip():
                 cmd(['pkill', '-f', 'daemon.py'])
                 time.sleep(0.5)
-                subprocess.Popen(['python3', DAEMON_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-            
+                subprocess.Popen(['python3', DAEMON_PATH], stdout=subprocess.DEVNULL, stderr=stderr=subprocess.DEVNULL, start_new_session=True)
             console.print(f"[bold green]Target diubah ke {new_target}! Restarting dashboard...[/]")
             time.sleep(1)
-            # Loop otomatis balik ke awal dan ngebuka tabel Live lagi
 
 if __name__ == '__main__':
     console.print("[bold cyan] Heartbeat Monitor ready...[/] [dim i]by @icedeyes12[/dim i]")
-    try: 
-        main()
-    except KeyboardInterrupt: 
-        pass
+    try: main()
+    except KeyboardInterrupt: pass
     console.print("\n[bold green]CLI closed. Daemon running in background.[/]")
