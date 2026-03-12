@@ -10,5 +10,6 @@ __pycache__/
 # Environment
 .env
 
-
+# Config
 config.json
+package-lock.json
