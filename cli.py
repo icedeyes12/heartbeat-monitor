@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import subprocess, time, os, json, sys, select, tty, termios
-from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -27,8 +26,7 @@ def get_ts():
 def get_ssh():
     r = cmd(['pgrep', '-c', 'sshd'])
     n = int(r.stdout.strip() if r and r.stdout else 0)
-    if n > 0:
-        return '🟢 RUNNING', f'{n} daemon | Port 2288'
+    if n > 0: return '🟢 RUNNING', f'{n} daemon | Port 2288'
     return '🔴 STOPPED', '-'
 
 def get_hb():
@@ -39,35 +37,30 @@ def get_hb():
                 with open(STATUS_FILE, 'r') as f:
                     d = json.load(f)
                     p = d.get('ping', {})
-                    m = f"Min: [green]{p.get('min',0)}[/] | Avg: [yellow]{p.get('avg',0)}[/] | Max: [red]{p.get('max',0)}[/] ms"
+                    last = d.get('last_ping', 0)
+                    color = "red" if last == "RTO" else "green"
+                    m = f"Last: [{color}]{last}[/] | Min: {p.get('min',0)} | Avg: {p.get('avg',0)} | Max: {p.get('max',0)} ms"
                     return '🟢 RUNNING', m
-            return '🟢 RUNNING', 'Waiting for data...'
-        except:
-            return '🟢 RUNNING', 'Read Error'
+        except: pass
+        return '🟢 RUNNING', 'Fetching data...'
     return '🔴 STOPPED', '-'
 
-def run_ts():
-    r = cmd(['pgrep', 'tailscaled'])
-    if r and r.stdout.strip():
-        cmd(['pkill', 'tailscaled'])
-    else:
-        subprocess.Popen(['tailscaled', '-tun=userspace-networking', '-socks5-server=localhost:1055', '-state=/home/.z/tailscale/tailscaled.state', '-socket=' + TAIL_SOCK], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(1)
-        cmd(['tailscale', '-socket=' + TAIL_SOCK, 'up', '-auth-key=' + os.environ.get('TAILSCALE_AUTH_KEY',''), '-hostname=' + os.environ.get('TAILSCALE_HOSTNAME','titit-0'), '-accept-dns=false'])
-
-def run_ssh():
-    r = cmd(['pgrep', '-c', 'sshd'])
-    if r and int(r.stdout.strip() or 0) > 0:
-        cmd(['pkill', 'sshd'])
-    else:
-        subprocess.Popen(['/usr/sbin/sshd', '-D', '-p', '2288', '-o', 'HostKey=/etc/ssh/ssh_host_ed25519_key'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-def run_hb():
-    r = cmd(['pgrep', '-f', 'daemon.py'])
-    if r and r.stdout.strip():
-        cmd(['pkill', '-f', 'daemon.py'])
-    else:
-        subprocess.Popen(['python3', '/home/workspace/heartbeat-monitor/daemon.py'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def run_svc(svc):
+    if svc == 'ts':
+        r = cmd(['pgrep', 'tailscaled'])
+        if r and r.stdout.strip(): cmd(['pkill', 'tailscaled'])
+        else:
+            subprocess.Popen(['tailscaled', '-tun=userspace-networking', '-socket=' + TAIL_SOCK], stdout=subprocess.DEVNULL)
+            time.sleep(1)
+            cmd(['tailscale', '-socket=' + TAIL_SOCK, 'up', '--hostname=titit-0', '--accept-dns=false'])
+    elif svc == 'ssh':
+        r = cmd(['pgrep', '-c', 'sshd'])
+        if r and int(r.stdout.strip() or 0) > 0: cmd(['pkill', 'sshd'])
+        else: subprocess.Popen(['/usr/sbin/sshd', '-D', '-p', '2288'], stdout=subprocess.DEVNULL)
+    elif svc == 'hb':
+        r = cmd(['pgrep', '-f', 'daemon.py'])
+        if r and r.stdout.strip(): cmd(['pkill', '-f', 'daemon.py'])
+        else: subprocess.Popen(['python3', '/home/workspace/heartbeat-monitor/daemon.py'], stdout=subprocess.DEVNULL)
 
 def generate_ui():
     table = Table(box=box.ROUNDED, expand=True, border_style="blue")
@@ -92,30 +85,24 @@ def generate_ui():
 
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
-    
     with Live(generate_ui(), refresh_per_second=4, transient=False) as live:
         old_settings = termios.tcgetattr(sys.stdin)
         try:
             tty.setcbreak(sys.stdin.fileno())
             while True:
                 live.update(generate_ui())
-                
                 if select.select([sys.stdin], [], [], 0.1)[0]:
                     key = sys.stdin.read(1).lower()
-                    if key == 'q':
-                        break
-                    elif key == '1': run_ts()
-                    elif key == '2': run_ssh()
-                    elif key == '3': run_hb()
-                
+                    if key == 'q': break
+                    elif key == '1': run_svc('ts')
+                    elif key == '2': run_svc('ssh')
+                    elif key == '3': run_svc('hb')
                 time.sleep(0.05)
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
 if __name__ == '__main__':
     console.print("[bold cyan]Welcome Bas, Heartbeat system ready...[/]")
-    try:
-        main()
-    except KeyboardInterrupt:
-        pass
-    console.print("\n[bold green]Bye![/]")
+    try: main()
+    except KeyboardInterrupt: pass
+    console.print("\n[bold green]Bye Bas![/]")
