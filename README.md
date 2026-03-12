@@ -1,39 +1,34 @@
 # Heartbeat Monitor
 
-Keepalive daemon untuk Zo Computer + rich CLI dashboard.
+Monitor dashboard untuk Tailscale, SSH, dan heartbeat ping.
 
 ## Files
-
-| File | Purpose |
-|------|---------|
-| `daemon.py` | Background process, auto-restart services |
-| `cli.py` | Rich TUI dashboard |
+- `daemon.py` - Ping ke 100.126.125.89 tiap 30 detik
+- `cli.py` - Dashboard interaktif
+- `logs/` - Auto-create, git-ignored
 
 ## Usage
 
 ```bash
-# Start daemon (background)
-nohup python3 /home/workspace/heartbeat-monitor/daemon.py > /dev/null 2>&1 &
-
-# Open dashboard (anytime)
-python3 /home/workspace/heartbeat-monitor/cli.py
+python3 daemon.py &
+python3 cli.py
 ```
+
+## Keys
+| Key | Action |
+|-----|--------|
+| 1 | Restart Tailscale |
+| 2 | Restart SSH |
+| 3 | Toggle Heartbeat |
+| l | Live Mode |
+| q | Quit |
 
 ## Auto-start
 
 Add to `.zshrc`:
-```zsh
-# Auto-start heartbeat daemon
-if ! pgrep -f "daemon.py" > /dev/null; then
-  nohup python3 /home/workspace/heartbeat-monitor/daemon.py > /dev/null 2>&1 &
+```bash
+if ! pgrep -f heartbeat-monitor/daemon.py > /dev/null; then
+    nohup python3 /home/workspace/heartbeat-monitor/daemon.py > /dev/null 2>&1 &
 fi
 alias hb='python3 /home/workspace/heartbeat-monitor/cli.py'
 ```
-
-## Features
-
-- Auto-restart Tailscale & SSH if down
-- Ping statistics (Avg/Min/Max ms)
-- Real-time rich UI
-- Multiple clients can connect
-- JSON state file at `/tmp/heartbeat.json`
