@@ -2,17 +2,28 @@
 import subprocess, os, json, re
 from datetime import datetime
 
-LOG_DIR = '/home/workspace/heartbeat-monitor/logs'
-STATUS_FILE = f'{LOG_DIR}/status.json'
+# --- Dynamic Path Detection ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+STATUS_FILE = os.path.join(LOG_DIR, 'status.json')
+CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     pings = []
     
-    # Langsung panggil ping murni. Di Termux/Linux biasanya ping udah
-    # lumayan line-buffered outputnya, jadi aman tanpa stdbuf.
+    # Baca target dari config, kalau gak ada balik ke default 1.1.1.1
+    target = "1.1.1.1"
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                target = json.load(f).get('target', '1.1.1.1')
+        except:
+            pass
+            
+    # Eksekusi ping ke target yang udah diset
     process = subprocess.Popen(
-        ['ping', '1.1.1.1'],
+        ['ping', target],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True
@@ -31,7 +42,6 @@ def main():
                 ms = float(match.group(1))
                 pings.append(ms)
                 
-                # Jaga history di 20 data terakhir
                 if len(pings) > 20: 
                     pings.pop(0)
                 
@@ -55,10 +65,10 @@ def main():
                 except:
                     pass
 
-            elif "timeout" in line.lower() or "unreachable" in line.lower():
+            elif "timeout" in line.lower() or "unreachable" in line.lower() or "cannot resolve" in line.lower():
                 status = {
                     'timestamp': datetime.now().strftime('%H:%M:%S'),
-                    'last_ping': 'RTO',
+                    'last_ping': 'RTO / Error',
                     'ping': {'avg': 0, 'min': 0, 'max': 0, 'count': 0}
                 }
                 try:
@@ -74,4 +84,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
