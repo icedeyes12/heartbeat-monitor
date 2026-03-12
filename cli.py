@@ -5,7 +5,6 @@ from rich.panel import Panel
 from rich.table import Table
 from rich import box
 from rich.live import Live
-from rich.columns import Columns
 
 console = Console()
 
@@ -34,19 +33,22 @@ def get_ts():
         lines = r.stdout.strip().split('\n')
         for l in lines:
             parts = l.split()
-            if not parts: continue
+            if len(parts) < 2: continue
             
-            # Deteksi status: Hijau jika 'active', 'idle', atau 'self' (mesin sendiri)
-            is_self = "self" in l.lower()
-            is_online = any(x in l.lower() for x in ["active", "idle", "self"])
+            # Logic: titit-0 (self) biasanya punya status '-' di kolom ke-5
+            is_active = any(x in l.lower() for x in ["active", "idle"])
+            is_self = parts[4] == "-" if len(parts) > 4 else False
             
             if parts[0].startswith('100.'):
                 name = parts[1]
-                # Pake icon ▣ buat mesin sendiri biar lo tau bedanya
-                icon = "[bold green]▣[/]" if is_self else ("[green]●[/]" if is_online else "[red]○[/]")
+                if is_self:
+                    icon = "[bold green]▣[/]" # Icon khusus mesin sendiri (Self)
+                elif is_active:
+                    icon = "[green]●[/]"
+                else:
+                    icon = "[red]○[/]"
                 nodes_info.append(f"{icon} {name}")
         
-        # Gabungin PID dan list node dengan baris baru agar alignment rapi
         node_display = " | ".join(nodes_info) if nodes_info else "No nodes found"
         return '[green]● ONLINE[/]', f"{pid_text}\n{node_display}"
         
@@ -75,7 +77,7 @@ def get_hb():
                     p = d.get('ping', {})
                     last = d.get('last_ping', 'Wait...') 
                     color = "red" if "RTO" in str(last) else "green"
-                    m = f"Last: [{color}]{last}[/] | Min/Avg/Max: {p.get('min',0)}/{p.get('avg',0)}/{p.get('max',0)} ms"
+                    m = f"Last: [{color}]{last}[/] | {p.get('min',0)}/{p.get('avg',0)}/{p.get('max',0)} ms"
                     return '[green]● RUNNING[/]', f"{pid_text}\n{m}"
         except: pass
         return '[green]● RUNNING[/]', f"{pid_text}\nWait..."
@@ -111,7 +113,6 @@ def run_svc(svc):
 
 # --- UI Builder ---
 def generate_ui():
-    # Kolom Service dan Status dibuat sempit (width=12) agar Metrics dapet space lega
     table = Table(box=box.ROUNDED, expand=True, border_style="blue", padding=(0, 1))
     table.add_column('Service', style='cyan', width=12) 
     table.add_column('Status', width=12)
@@ -143,7 +144,8 @@ def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     while True:
         action = None
-        with Live(generate_ui(), refresh_per_second=5, transient=True) as live:
+        # refresh_per_second diturunin ke 2 biar CPU gak kerja rodi
+        with Live(generate_ui(), refresh_per_second=2, transient=True) as live:
             old_settings = termios.tcgetattr(sys.stdin)
             try:
                 tty.setcbreak(sys.stdin.fileno())
@@ -151,12 +153,8 @@ def main():
                     live.update(generate_ui())
                     if select.select([sys.stdin], [], [], 0.05)[0]:
                         key = sys.stdin.read(1).lower()
-                        if key == 'q': 
-                            action = 'quit'
-                            break
-                        elif key == 't':
-                            action = 'target'
-                            break
+                        if key == 'q': action = 'quit'; break
+                        elif key == 't': action = 'target'; break
                         elif key == '1': run_svc('ts')
                         elif key == '2': run_svc('ssh')
                         elif key == '3': run_svc('hb')
@@ -167,9 +165,8 @@ def main():
         if action == 'quit': break
         elif action == 'target':
             console.print("\n[bold cyan]=== Ganti Target Ping ===[/]")
-            new_target = console.input("[bold]Masukkan IP/Domain (kosongkan untuk default 1.1.1.1): [/]").strip()
+            new_target = console.input("[bold]Masukkan IP/Domain: [/]").strip()
             if not new_target: new_target = "1.1.1.1"
-            
             with open(CONFIG_FILE, 'w') as f:
                 json.dump({"target": new_target}, f)
             
@@ -179,11 +176,9 @@ def main():
                 time.sleep(0.5)
                 subprocess.Popen(['python3', DAEMON_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             
-            console.print(f"[bold green]Target diubah ke {new_target}! Restarting dashboard...[/]")
+            console.print(f"[bold green]Target diubah ke {new_target}![/]")
             time.sleep(1)
 
 if __name__ == '__main__':
-    console.print("[bold cyan] Heartbeat Monitor ready...[/] [dim i]by @icedeyes12[/dim i]")
     try: main()
     except KeyboardInterrupt: pass
-    console.print("\n[bold green]CLI closed. Daemon running in background.[/]")
