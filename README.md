@@ -40,7 +40,10 @@ Host *
     TCPKeepAlive yes
 
 2. Buat Bocil Termux (Wajib!) ⚠️
-Kalo lo jalanin tools ini di Termux, Android bakal otomatis "nyuntik mati" prosesnya pas HP masuk kantong (CPU mode tidur). Biar lari maraton terus, lo WAJIB aktifin WakeLock:
+
+Kalo lo jalanin tools ini di Termux, Android bakal otomatis "nyuntik mati" prosesnya pas HP masuk kantong (CPU mode tidur).
+Biar lari maraton terus, lo WAJIB aktifin WakeLock:
+
  * Tarik bar notifikasi, cari notifikasi Termux, klik "Acquire WakeLock".
  * Atau ketik perintah ini di terminal:
    ```bash
@@ -53,14 +56,18 @@ Masukin baris ini ke .zshrc atau .bashrc biar otomatis jalan tiap buka terminal:
 ```bash
 # Otomatis deteksi path repo
 HB_PATH="$HOME/heartbeat-monitor"
+```
 
+```bash
 # Start daemon kalo belum jalan
 if ! pgrep -f "$HB_PATH/daemon.py" > /dev/null; then
     nohup python3 "$HB_PATH/daemon.py" > /dev/null 2>&1 &
 fi
+```
 
+```bash
 # Shortcut login dashboard
 alias hb="python3 $HB_PATH/cli.py"
 ```
 
-jangan tanya saya kalo eror, coba tanya github copilot
+Kalo eror, jangan tanya saya coba tanya github copilot
