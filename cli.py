@@ -5,6 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich import box
 from rich.live import Live
+from rich.columns import Columns
 
 console = Console()
 
@@ -24,7 +25,7 @@ def cmd(c, t=2):
 def get_ts():
     r_pid = cmd(['pgrep', 'tailscaled'])
     pids = r_pid.stdout.strip().replace('\n', ',') if r_pid and r_pid.stdout else ""
-    pid_text = f"[dim cyan][{pids}][/] " if pids else ""
+    pid_text = f"[dim cyan][PID: {pids}][/]" if pids else ""
     
     r = cmd(['tailscale', '--socket=' + TAIL_SOCK, 'status'])
     nodes_info = []
@@ -35,31 +36,36 @@ def get_ts():
             parts = l.split()
             if not parts: continue
             
-            # Deteksi node (biasanya diawali IP 100.x.x.x)
+            # Deteksi status: Hijau jika 'active', 'idle', atau 'self' (mesin sendiri)
+            is_self = "self" in l.lower()
+            is_online = any(x in l.lower() for x in ["active", "idle", "self"])
+            
             if parts[0].startswith('100.'):
                 name = parts[1]
-                # Memberikan indikator warna berdasarkan status koneksi node
-                status = "[green]●[/]" if "active" in l.lower() or "idle" in l.lower() else "[red]○[/]"
-                nodes_info.append(f"{status} {name}")
+                # Pake icon ▣ buat mesin sendiri biar lo tau bedanya
+                icon = "[bold green]▣[/]" if is_self else ("[green]●[/]" if is_online else "[red]○[/]")
+                nodes_info.append(f"{icon} {name}")
         
-        info_display = pid_text + " | ".join(nodes_info) if nodes_info else pid_text + "No nodes found"
-        return '[green]● ONLINE[/]', info_display
+        # Gabungin PID dan list node dengan baris baru agar alignment rapi
+        node_display = " | ".join(nodes_info) if nodes_info else "No nodes found"
+        return '[green]● ONLINE[/]', f"{pid_text}\n{node_display}"
+        
     return '[red]○ OFFLINE[/]', '-'
 
 def get_ssh():
     r_pid = cmd(['pgrep', 'sshd'])
     pids = r_pid.stdout.strip().replace('\n', ',') if r_pid and r_pid.stdout else ""
-    pid_text = f"[dim cyan][{pids}][/] " if pids else ""
+    pid_text = f"[dim cyan][PID: {pids}][/]" if pids else ""
     
     n = len(pids.split(',')) if pids else 0
     if n > 0: 
-        return '[green]● RUNNING[/]', pid_text + f'{n} daemon | Port 2288'
+        return '[green]● RUNNING[/]', f"{pid_text}\n{n} daemon | Port 2288"
     return '[red]○ STOPPED[/]', '-'
 
 def get_hb():
     r_pid = cmd(['pgrep', '-f', 'daemon.py'])
     pids = r_pid.stdout.strip().replace('\n', ',') if r_pid and r_pid.stdout else ""
-    pid_text = f"[dim cyan][{pids}][/] " if pids else ""
+    pid_text = f"[dim cyan][PID: {pids}][/]" if pids else ""
     
     if pids:
         try:
@@ -70,9 +76,9 @@ def get_hb():
                     last = d.get('last_ping', 'Wait...') 
                     color = "red" if "RTO" in str(last) else "green"
                     m = f"Last: [{color}]{last}[/] | Min/Avg/Max: {p.get('min',0)}/{p.get('avg',0)}/{p.get('max',0)} ms"
-                    return '[green]● RUNNING[/]', pid_text + m
+                    return '[green]● RUNNING[/]', f"{pid_text}\n{m}"
         except: pass
-        return '[green]● RUNNING[/]', pid_text + 'Wait...'
+        return '[green]● RUNNING[/]', f"{pid_text}\nWait..."
     return '[red]○ STOPPED[/]', '-'
 
 # --- Service Toggles ---
@@ -105,7 +111,7 @@ def run_svc(svc):
 
 # --- UI Builder ---
 def generate_ui():
-    # Mengatur lebar kolom Service dan Status agar lebih ramping (width=12)
+    # Kolom Service dan Status dibuat sempit (width=12) agar Metrics dapet space lega
     table = Table(box=box.ROUNDED, expand=True, border_style="blue", padding=(0, 1))
     table.add_column('Service', style='cyan', width=12) 
     table.add_column('Status', width=12)
@@ -124,7 +130,7 @@ def generate_ui():
     
     table.add_row('Tailscale', ts_s, ts_i)
     table.add_row('SSH', ss_s, ss_i)
-    table.add_row(f'Heartbeat\n[dim]({target})[/]', hb_s, hb_i)
+    table.add_row(f'Heartbeat\n[dim cyan]({target})[/]', hb_s, hb_i)
     
     return Panel(
         table, 
@@ -163,10 +169,10 @@ def main():
             console.print("\n[bold cyan]=== Ganti Target Ping ===[/]")
             new_target = console.input("[bold]Masukkan IP/Domain (kosongkan untuk default 1.1.1.1): [/]").strip()
             if not new_target: new_target = "1.1.1.1"
+            
             with open(CONFIG_FILE, 'w') as f:
                 json.dump({"target": new_target}, f)
             
-            # Restart daemon biar target baru aktif
             r = cmd(['pgrep', '-f', 'daemon.py'])
             if r and r.stdout.strip():
                 cmd(['pkill', '-f', 'daemon.py'])
