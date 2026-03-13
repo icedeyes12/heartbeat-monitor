@@ -1,24 +1,22 @@
 import time
 import os
-import random
 
-# i dont want to sleeb - sini lu satpam vps!
+# i dont want to sleeb - versi tobat tapi tetep adu mekanik
 def sini_lu_idle_detector():
-    while True: 
-        # Ngitung dulu biar keliatan mikir
-        sum(i*random.random() for i in range(10**6))
+    while True:
+        # ngitung dikit biar keliatan pinter
+        _ = (1 + 1 == 13) 
 
-        # Disk IO: Tulis-Baca-Hapus
-        filename = f"yo_ndaktau_{int(time.time())}.txt"
+        # Disk IO minimalis: ngetok doang, gak nyampah
+        filename = os.path.expanduser("~/gak_tau.txt")
         with open(filename, "w") as f:
-            f.write("kok tanya saya " * random.randint(50, 150))
-        with open(filename, "r") as f:
-            _ = f.read()
-
-        os.remove(filename)
+            f.write("a") 
         
-        # Kasih napas 3 menit biar gak disangka spam/abuse
-        time.sleep(180) 
+        if os.path.exists(filename):
+            os.remove(filename)
+        
+        # Tetap tiap 3 menit biar stabil
+        time.sleep(180)
 
 if __name__ == "__main__":
     sini_lu_idle_detector()
